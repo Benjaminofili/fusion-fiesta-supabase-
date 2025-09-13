@@ -1,36 +1,36 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'registration_model.dart';
+part of 'certificate_model.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class RegistrationModelAdapter extends TypeAdapter<RegistrationModel> {
+class CertificateModelAdapter extends TypeAdapter<CertificateModel> {
   @override
-  final int typeId = 2;
+  final int typeId = 4;
 
   @override
-  RegistrationModel read(BinaryReader reader) {
+  CertificateModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return RegistrationModel(
+    return CertificateModel(
       id: fields[0] as String,
       userId: fields[1] as String,
       eventId: fields[2] as String,
-      status: fields[3] as String,
-      registeredAt: fields[4] as DateTime,
-      registrationCode: fields[5] as String?,
-      attendanceMarkedAt: fields[6] as DateTime?,
-      paymentStatus: fields[7] as String?,
-      paymentReference: fields[8] as String?,
+      certificateUrl: fields[3] as String,
+      certificateCode: fields[4] as String,
+      templateUsed: fields[5] as String?,
+      issuedAt: fields[6] as DateTime,
+      downloadedAt: fields[7] as DateTime?,
+      eventTitle: fields[8] as String?,
     );
   }
 
   @override
-  void write(BinaryWriter writer, RegistrationModel obj) {
+  void write(BinaryWriter writer, CertificateModel obj) {
     writer
       ..writeByte(9)
       ..writeByte(0)
@@ -40,17 +40,17 @@ class RegistrationModelAdapter extends TypeAdapter<RegistrationModel> {
       ..writeByte(2)
       ..write(obj.eventId)
       ..writeByte(3)
-      ..write(obj.status)
+      ..write(obj.certificateUrl)
       ..writeByte(4)
-      ..write(obj.registeredAt)
+      ..write(obj.certificateCode)
       ..writeByte(5)
-      ..write(obj.registrationCode)
+      ..write(obj.templateUsed)
       ..writeByte(6)
-      ..write(obj.attendanceMarkedAt)
+      ..write(obj.issuedAt)
       ..writeByte(7)
-      ..write(obj.paymentStatus)
+      ..write(obj.downloadedAt)
       ..writeByte(8)
-      ..write(obj.paymentReference);
+      ..write(obj.eventTitle);
   }
 
   @override
@@ -59,7 +59,7 @@ class RegistrationModelAdapter extends TypeAdapter<RegistrationModel> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is RegistrationModelAdapter &&
+      other is CertificateModelAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

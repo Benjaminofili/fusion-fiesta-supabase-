@@ -19,26 +19,32 @@ class FeedbackModelAdapter extends TypeAdapter<FeedbackModel> {
     return FeedbackModel(
       id: fields[0] as String,
       userId: fields[1] as String,
-      message: fields[2] as String,
+      eventId: fields[2] as String,
       rating: fields[3] as int,
-      createdAt: fields[4] as DateTime,
+      message: fields[4] as String?,
+      createdAt: fields[5] as DateTime,
+      isAnonymous: fields[6] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, FeedbackModel obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.userId)
       ..writeByte(2)
-      ..write(obj.message)
+      ..write(obj.eventId)
       ..writeByte(3)
       ..write(obj.rating)
       ..writeByte(4)
-      ..write(obj.createdAt);
+      ..write(obj.message)
+      ..writeByte(5)
+      ..write(obj.createdAt)
+      ..writeByte(6)
+      ..write(obj.isAnonymous);
   }
 
   @override

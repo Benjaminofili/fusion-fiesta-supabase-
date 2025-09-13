@@ -1,4 +1,4 @@
-import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 part 'registration_model.g.dart';
 
@@ -14,10 +14,22 @@ class RegistrationModel extends HiveObject {
   String eventId;
 
   @HiveField(3)
-  String status; // pending, confirmed, cancelled
+  String status;
 
   @HiveField(4)
   DateTime registeredAt;
+
+  @HiveField(5)
+  String? registrationCode;
+
+  @HiveField(6)
+  DateTime? attendanceMarkedAt;
+
+  @HiveField(7)
+  String? paymentStatus;
+
+  @HiveField(8)
+  String? paymentReference;
 
   RegistrationModel({
     required this.id,
@@ -25,31 +37,39 @@ class RegistrationModel extends HiveObject {
     required this.eventId,
     required this.status,
     required this.registeredAt,
+    this.registrationCode,
+    this.attendanceMarkedAt,
+    this.paymentStatus,
+    this.paymentReference,
   });
 
-  Map<String, dynamic> toJson() {
+  factory RegistrationModel.fromMap(Map<String, dynamic> map) {
+    return RegistrationModel(
+      id: map['id'] as String,
+      userId: map['user_id'] as String,
+      eventId: map['event_id'] as String,
+      status: map['status'] as String,
+      registeredAt: DateTime.parse(map['registered_at'] as String),
+      registrationCode: map['registration_code'] as String?,
+      attendanceMarkedAt: map['attendance_marked_at'] != null
+          ? DateTime.parse(map['attendance_marked_at'] as String)
+          : null,
+      paymentStatus: map['payment_status'] as String?,
+      paymentReference: map['payment_reference'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
       'user_id': userId,
       'event_id': eventId,
       'status': status,
       'registered_at': registeredAt.toIso8601String(),
+      'registration_code': registrationCode,
+      'attendance_marked_at': attendanceMarkedAt?.toIso8601String(),
+      'payment_status': paymentStatus,
+      'payment_reference': paymentReference,
     };
-  }
-
-  factory RegistrationModel.fromJson(Map<String, dynamic> json) {
-    return RegistrationModel(
-      id: json['id'] ?? '',
-      userId: json['user_id'] ?? '',
-      eventId: json['event_id'] ?? '',
-      status: json['status'] ?? 'pending',
-      registeredAt: _parseDate(json['registered_at']),
-    );
-  }
-
-  static DateTime _parseDate(dynamic value) {
-    if (value is String && value.isNotEmpty) return DateTime.parse(value);
-    if (value is DateTime) return value;
-    return DateTime.now();
   }
 }

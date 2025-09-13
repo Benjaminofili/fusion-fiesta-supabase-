@@ -1,56 +1,50 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'registration_model.dart';
+part of 'notification_model.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class RegistrationModelAdapter extends TypeAdapter<RegistrationModel> {
+class NotificationModelAdapter extends TypeAdapter<NotificationModel> {
   @override
-  final int typeId = 2;
+  final int typeId = 5;
 
   @override
-  RegistrationModel read(BinaryReader reader) {
+  NotificationModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return RegistrationModel(
+    return NotificationModel(
       id: fields[0] as String,
       userId: fields[1] as String,
-      eventId: fields[2] as String,
-      status: fields[3] as String,
-      registeredAt: fields[4] as DateTime,
-      registrationCode: fields[5] as String?,
-      attendanceMarkedAt: fields[6] as DateTime?,
-      paymentStatus: fields[7] as String?,
-      paymentReference: fields[8] as String?,
+      title: fields[2] as String,
+      message: fields[3] as String,
+      isRead: fields[4] as bool,
+      createdAt: fields[5] as DateTime,
+      type: fields[6] as String,
     );
   }
 
   @override
-  void write(BinaryWriter writer, RegistrationModel obj) {
+  void write(BinaryWriter writer, NotificationModel obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.userId)
       ..writeByte(2)
-      ..write(obj.eventId)
+      ..write(obj.title)
       ..writeByte(3)
-      ..write(obj.status)
+      ..write(obj.message)
       ..writeByte(4)
-      ..write(obj.registeredAt)
+      ..write(obj.isRead)
       ..writeByte(5)
-      ..write(obj.registrationCode)
+      ..write(obj.createdAt)
       ..writeByte(6)
-      ..write(obj.attendanceMarkedAt)
-      ..writeByte(7)
-      ..write(obj.paymentStatus)
-      ..writeByte(8)
-      ..write(obj.paymentReference);
+      ..write(obj.type);
   }
 
   @override
@@ -59,7 +53,7 @@ class RegistrationModelAdapter extends TypeAdapter<RegistrationModel> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is RegistrationModelAdapter &&
+      other is NotificationModelAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

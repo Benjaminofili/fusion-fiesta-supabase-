@@ -1,7 +1,16 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:fusion_fiesta/core/services/event_service.dart';
+import 'package:fusion_fiesta/core/services/notification_service.dart';
+import 'package:fusion_fiesta/core/services/feedback_service.dart';
+import 'package:fusion_fiesta/core/services/certificate_service.dart';
+import 'package:fusion_fiesta/models/event_model.dart';
+import 'package:fusion_fiesta/models/notification_model.dart';
+import 'package:fusion_fiesta/models/feedback_model.dart';
+import 'package:fusion_fiesta/models/certificate_model.dart';
+import 'package:fusion_fiesta/supabase_manager.dart'; // Added import
+import '../../../../core/constants/app_constants.dart';
 
-// Events
 abstract class DashboardEvent extends Equatable {
   const DashboardEvent();
 
@@ -22,7 +31,6 @@ class FetchDashboardDataEvent extends DashboardEvent {
   List<Object> get props => [userRole, userId];
 }
 
-// States
 abstract class DashboardState extends Equatable {
   const DashboardState();
 
@@ -52,7 +60,6 @@ class DashboardError extends DashboardState {
   List<Object> get props => [message];
 }
 
-// Bloc
 class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   DashboardBloc() : super(DashboardInitial()) {
     on<FetchDashboardDataEvent>(_onFetchDashboardData);
@@ -61,170 +68,93 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   Future<void> _onFetchDashboardData(FetchDashboardDataEvent event, Emitter<DashboardState> emit) async {
     emit(DashboardLoading());
     try {
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // Mock dashboard data based on user role
       Map<String, dynamic> dashboardData = {};
-      
-      if (event.userRole == 'student') {
-        dashboardData = {
-          'upcomingEvents': [
-            {
-              'id': '1',
-              'title': 'Tech Conference 2023',
-              'date': '2023-11-15',
-              'location': 'Main Auditorium',
-            },
-            {
-              'id': '2',
-              'title': 'Cultural Fest',
-              'date': '2023-12-05',
-              'location': 'College Grounds',
-            },
-          ],
-          'registeredEvents': [
-            {
-              'id': '3',
-              'title': 'Hackathon 2023',
-              'date': '2023-10-20',
-              'location': 'Computer Lab',
-              'status': 'Confirmed',
-            },
-          ],
-          'certificates': [
-            {
-              'id': '1',
-              'title': 'Web Development Workshop',
-              'issueDate': '2023-09-15',
-              'issuer': 'Computer Science Department',
-            },
-          ],
-          'notifications': [
-            {
-              'id': '1',
-              'title': 'Registration Confirmed',
-              'message': 'Your registration for Hackathon 2023 has been confirmed.',
-              'timestamp': '2023-10-10T10:30:00Z',
-              'read': false,
-            },
-            {
-              'id': '2',
-              'title': 'New Event Added',
-              'message': 'Tech Conference 2023 has been added to the calendar.',
-              'timestamp': '2023-10-08T14:15:00Z',
-              'read': true,
-            },
-          ],
-          'stats': {
-            'eventsAttended': 5,
-            'certificatesEarned': 3,
-            'feedbackSubmitted': 4,
-          },
-        };
-      } else if (event.userRole == 'organizer') {
-        dashboardData = {
-          'managedEvents': [
-            {
-              'id': '1',
-              'title': 'Tech Conference 2023',
-              'date': '2023-11-15',
-              'location': 'Main Auditorium',
-              'registrations': 150,
-              'capacity': 200,
-            },
-            {
-              'id': '3',
-              'title': 'Hackathon 2023',
-              'date': '2023-10-20',
-              'location': 'Computer Lab',
-              'registrations': 98,
-              'capacity': 100,
-            },
-          ],
-          'pendingApprovals': [
-            {
-              'id': '1',
-              'type': 'Event Registration',
-              'user': 'John Doe',
-              'event': 'Tech Conference 2023',
-              'timestamp': '2023-10-12T09:45:00Z',
-            },
-            {
-              'id': '2',
-              'type': 'Certificate Request',
-              'user': 'Jane Smith',
-              'event': 'Web Development Workshop',
-              'timestamp': '2023-10-11T16:20:00Z',
-            },
-          ],
-          'notifications': [
-            {
-              'id': '1',
-              'title': 'Event Capacity Alert',
-              'message': 'Hackathon 2023 is at 98% capacity.',
-              'timestamp': '2023-10-15T11:30:00Z',
-              'read': false,
-            },
-          ],
-          'stats': {
-            'totalEvents': 2,
-            'totalRegistrations': 248,
-            'averageFeedbackRating': 4.5,
-          },
-        };
-      } else if (event.userRole == 'admin') {
-        dashboardData = {
-          'allEvents': [
-            {
-              'id': '1',
-              'title': 'Tech Conference 2023',
-              'organizer': 'Computer Science Department',
-              'date': '2023-11-15',
-              'registrations': 150,
-              'capacity': 200,
-            },
-            {
-              'id': '2',
-              'title': 'Cultural Fest',
-              'organizer': 'Cultural Committee',
-              'date': '2023-12-05',
-              'registrations': 320,
-              'capacity': 500,
-            },
-            {
-              'id': '3',
-              'title': 'Hackathon 2023',
-              'organizer': 'Coding Club',
-              'date': '2023-10-20',
-              'registrations': 98,
-              'capacity': 100,
-            },
-          ],
-          'userStats': {
-            'totalUsers': 1250,
-            'students': 1150,
-            'organizers': 80,
-            'admins': 20,
-          },
-          'eventStats': {
-            'totalEvents': 3,
-            'upcomingEvents': 2,
-            'pastEvents': 1,
-            'totalRegistrations': 568,
-          },
-          'systemAlerts': [
-            {
-              'id': '1',
-              'title': 'Server Load High',
-              'message': 'The server is experiencing high load due to increased registration activity.',
-              'severity': 'warning',
-              'timestamp': '2023-10-15T14:30:00Z',
-            },
-          ],
+
+      // Fetch notifications (common for all roles)
+      final notificationsResult = await NotificationService.getNotifications(event.userId);
+      if (notificationsResult['success']) {
+        dashboardData['notifications'] = notificationsResult['notifications'] as List<NotificationModel>;
+      } else {
+        print('Failed to load notifications: ${notificationsResult['error']}');
+      }
+
+      if (event.userRole == AppConstants.roleParticipant) {
+        // Student dashboard data
+        final upcomingResult = await EventService.getUpcomingEvents();
+        if (upcomingResult['success']) {
+          dashboardData['upcomingEvents'] = upcomingResult['events'] as List<EventModel>;
+        } else {
+          print('Failed to load upcoming events: ${upcomingResult['error']}');
+        }
+
+        final registeredResult = await EventService.getRegisteredEvents(event.userId);
+        if (registeredResult['success']) {
+          dashboardData['registeredEvents'] = registeredResult['events'] as List<EventModel>;
+        } else {
+          print('Failed to load registered events: ${registeredResult['error']}');
+        }
+
+        final certificatesResult = await CertificateService.getUserCertificates(event.userId);
+        if (certificatesResult['success']) {
+          dashboardData['certificates'] = certificatesResult['certificates'] as List<CertificateModel>;
+        } else {
+          print('Failed to load certificates: ${certificatesResult['error']}');
+        }
+
+      } else if (event.userRole == AppConstants.roleStaff) {
+        // Organizer dashboard data
+        final createdResult = await EventService.getCreatedEvents(event.userId);
+        if (createdResult['success']) {
+          dashboardData['createdEvents'] = createdResult['events'] as List<EventModel>;
+        } else {
+          print('Failed to load created events: ${createdResult['error']}');
+        }
+
+        dashboardData['eventStats'] = {};
+        dashboardData['eventFeedback'] = {};
+        for (final event in (dashboardData['createdEvents'] ?? []) as List<EventModel>) {
+          final statsResult = await EventService.getEventStatistics(event.id);
+          if (statsResult['success']) {
+            dashboardData['eventStats'][event.id] = {
+              'registrations': statsResult['registrations'],
+              'averageFeedback': statsResult['averageFeedback'],
+            };
+          } else {
+            print('Failed to load stats for event ${event.id}: ${statsResult['error']}');
+          }
+
+          final feedbackResult = await FeedbackService.getEventFeedback(event.id);
+          if (feedbackResult['success']) {
+            dashboardData['eventFeedback'][event.id] = feedbackResult['feedbacks'] as List<FeedbackModel>;
+          } else {
+            print('Failed to load feedback for event ${event.id}: ${feedbackResult['error']}');
+          }
+        }
+
+      } else if (event.userRole == AppConstants.roleStaff && /* Check if admin, e.g., user.approved */ true) {
+        // Admin dashboard data
+        final pendingResult = await EventService.getPendingEvents();
+        if (pendingResult['success']) {
+          dashboardData['pendingEvents'] = pendingResult['events'] as List<EventModel>;
+        } else {
+          print('Failed to load pending events: ${pendingResult['error']}');
+        }
+
+        final allEventsResult = await EventService.getAllEvents();
+        if (allEventsResult['success']) {
+          dashboardData['allEvents'] = allEventsResult['events'] as List<EventModel>;
+        } else {
+          print('Failed to load all events: ${allEventsResult['error']}');
+        }
+
+        // Fetch user count using SupabaseManager.client
+        final userCountResponse = await SupabaseManager.client.from('users').select('count(*)');
+        final totalUsers = (userCountResponse as List).isNotEmpty ? (userCountResponse[0]['count'] as int?) ?? 0 : 0;
+        dashboardData['userStats'] = {
+          'totalUsers': totalUsers,
         };
       }
-      
+
       emit(DashboardLoaded(dashboardData: dashboardData));
     } catch (e) {
       emit(DashboardError(message: e.toString()));
