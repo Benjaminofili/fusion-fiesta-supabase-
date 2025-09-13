@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="fusionfiesta"
+        android:label="fusion_fiesta"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

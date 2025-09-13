@@ -1,6 +1,6 @@
 {
-    "name": "fusionfiesta",
-    "short_name": "fusionfiesta",
+    "name": "fusion_fiesta",
+    "short_name": "fusion_fiesta",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
