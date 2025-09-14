@@ -1,9 +1,11 @@
 import 'package:hive/hive.dart';
 
+import '../core/constants/app_constants.dart';
+
 part 'event_model.g.dart';
 
 @HiveType(typeId: 1)
-class EventModel {
+class EventModel extends HiveObject {
   @HiveField(0)
   final String id;
 
@@ -76,24 +78,44 @@ class EventModel {
   });
 
   factory EventModel.fromMap(Map<String, dynamic> map) {
+    // Handle null String fields with defaults
+    final id = map['id'] as String? ?? 'unknown_id';
+    final title = map['title'] as String? ?? 'Untitled Event';
+    final description = map['description'] as String? ?? 'No description';
+    final category = map['category'] as String? ?? 'Unknown';
+    final venue = map['venue'] as String? ?? 'Unknown Venue';
+    final status = map['status'] as String? ?? AppConstants.statusPending;
+    final organizerId = map['organizer_id'] as String?;
+    final eventType = map['event_type'] as String? ?? 'academic'; // Default value
+
+    // Handle date and time combination
+    final date = map['date'] as String?;
+    final time = map['time'] as String?;
+    DateTime dateTime;
+    try {
+      dateTime = DateTime.parse('${date ?? '1970-01-01'} ${time ?? '00:00:00'}');
+    } catch (e) {
+      dateTime = DateTime.now(); // Fallback to current time if parsing fails
+    }
+
     return EventModel(
-      id: map['id'] as String,
-      title: map['title'] as String,
-      description: map['description'] as String,
-      category: map['category'] as String,
+      id: id,
+      title: title,
+      description: description,
+      category: category,
       department: map['department'] as String?,
-      dateTime: DateTime.parse('${map['date']} ${map['time']}'), // Combine date and time
-      venue: map['venue'] as String,
-      status: map['status'] as String,
-      organizerId: map['organizer_id'] as String?,
-      maxParticipants: map['max_participants'] as int,
-      currentParticipants: map['current_participants'] as int,
+      dateTime: dateTime,
+      venue: venue,
+      status: status,
+      organizerId: organizerId,
+      maxParticipants: (map['max_participants'] as int?) ?? 0,
+      currentParticipants: (map['current_participants'] as int?) ?? 0,
       bannerUrl: map['banner_url'] as String?,
-      cost: (map['cost'] as num).toDouble(),
+      cost: (map['cost'] as num?)?.toDouble() ?? 0.0,
       registrationDeadline: map['registration_deadline'] != null
           ? DateTime.parse(map['registration_deadline'] as String)
           : null,
-      eventType: map['event_type'] as String,
+      eventType: eventType,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );

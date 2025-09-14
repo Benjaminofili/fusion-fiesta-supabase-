@@ -28,7 +28,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _agreeToTerms = false;
   bool _isLoading = false;
   String _selectedRole = 'Student';
-  final List<String> _roles = ['Student', 'Organizer'];
+  final List<String> _roles = ['Student', 'Organizer', 'Admin'];
 
   @override
   void dispose() {

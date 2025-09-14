@@ -1,7 +1,18 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:fusion_fiesta/core/services/certificate_service.dart';
+import 'package:fusion_fiesta/models/certificate_model.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:cross_file/cross_file.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:fusion_fiesta/core/services/AppError.dart';
+import 'package:fusion_fiesta/core/services/sync_service.dart';
+import 'package:fusion_fiesta/supabase_manager.dart';
+import 'package:fusion_fiesta/storage/hive_manager.dart';
 
-// Events
 abstract class CertificatesEvent extends Equatable {
   const CertificatesEvent();
 
@@ -29,7 +40,7 @@ class DownloadCertificateEvent extends CertificatesEvent {
 
 class ShareCertificateEvent extends CertificatesEvent {
   final String certificateId;
-  final String platform; // email, whatsapp, linkedin, etc.
+  final String platform;
 
   const ShareCertificateEvent({
     required this.certificateId,
@@ -40,7 +51,6 @@ class ShareCertificateEvent extends CertificatesEvent {
   List<Object> get props => [certificateId, platform];
 }
 
-// States
 abstract class CertificatesState extends Equatable {
   const CertificatesState();
 
@@ -53,7 +63,7 @@ class CertificatesInitial extends CertificatesState {}
 class CertificatesLoading extends CertificatesState {}
 
 class CertificatesLoaded extends CertificatesState {
-  final List<Map<String, dynamic>> certificates;
+  final List<CertificateModel> certificates;
 
   const CertificatesLoaded({required this.certificates});
 
@@ -118,7 +128,6 @@ class CertificatesError extends CertificatesState {
   List<Object> get props => [message];
 }
 
-// Bloc
 class CertificatesBloc extends Bloc<CertificatesEvent, CertificatesState> {
   CertificatesBloc() : super(CertificatesInitial()) {
     on<FetchCertificatesEvent>(_onFetchCertificates);
@@ -129,108 +138,131 @@ class CertificatesBloc extends Bloc<CertificatesEvent, CertificatesState> {
   Future<void> _onFetchCertificates(FetchCertificatesEvent event, Emitter<CertificatesState> emit) async {
     emit(CertificatesLoading());
     try {
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // Mock certificates data
-      final certificates = [
-        {
-          'id': '1',
-          'title': 'Flutter Development Bootcamp',
-          'issuer': 'Mobile App Development Club',
-          'issueDate': '2023-08-20',
-          'eventId': 'event1',
-          'description': 'Awarded for successfully completing the Flutter Development Bootcamp and demonstrating proficiency in building cross-platform mobile applications.',
-          'imageUrl': 'assets/certificates/flutter_bootcamp.jpg',
-          'skills': ['Flutter', 'Dart', 'Mobile Development'],
-          'verificationCode': 'FLTR-2023-08-JD-001',
-        },
-        {
-          'id': '2',
-          'title': 'Web Development Workshop',
-          'issuer': 'Computer Science Department',
-          'issueDate': '2023-09-15',
-          'eventId': 'event2',
-          'description': 'Awarded for active participation and completion of the Web Development Workshop, covering HTML, CSS, JavaScript, and responsive design principles.',
-          'imageUrl': 'assets/certificates/web_dev_workshop.jpg',
-          'skills': ['HTML', 'CSS', 'JavaScript', 'Responsive Design'],
-          'verificationCode': 'WEB-2023-09-JD-002',
-        },
-        {
-          'id': '3',
-          'title': 'UI/UX Design Fundamentals',
-          'issuer': 'Design Innovation Lab',
-          'issueDate': '2023-07-05',
-          'eventId': 'event3',
-          'description': 'Awarded for completing the UI/UX Design Fundamentals course and demonstrating understanding of user-centered design principles and prototyping techniques.',
-          'imageUrl': 'assets/certificates/uiux_design.jpg',
-          'skills': ['UI Design', 'UX Design', 'Prototyping', 'User Research'],
-          'verificationCode': 'UIUX-2023-07-JD-003',
-        },
-        {
-          'id': '4',
-          'title': 'Hackathon 2023 Participant',
-          'issuer': 'Coding Club',
-          'issueDate': '2023-10-22',
-          'eventId': 'event4',
-          'description': 'Awarded for participating in Hackathon 2023 and developing innovative solutions to real-world problems within a 48-hour timeframe.',
-          'imageUrl': 'assets/certificates/hackathon_2023.jpg',
-          'skills': ['Problem Solving', 'Teamwork', 'Rapid Prototyping'],
-          'verificationCode': 'HACK-2023-10-JD-004',
-        },
-      ];
-      
-      emit(CertificatesLoaded(certificates: certificates));
+      final result = await CertificateService.getUserCertificates(event.userId);
+      if (result['success']) {
+        emit(CertificatesLoaded(certificates: result['certificates'] as List<CertificateModel>));
+      } else {
+        emit(CertificatesError(message: result['error']));
+      }
     } catch (e) {
-      emit(CertificatesError(message: e.toString()));
+      emit(CertificatesError(message: AppError.fromException(e).message));
     }
   }
 
   Future<void> _onDownloadCertificate(DownloadCertificateEvent event, Emitter<CertificatesState> emit) async {
     emit(CertificateDownloading(certificateId: event.certificateId));
     try {
-      // Simulate download process
-      await Future.delayed(const Duration(seconds: 2));
-      
-      // Mock file path for downloaded certificate
-  final filePath = 'certificate_${event.certificateId}.pdf';
-      
+      bool isOnline = await SyncService.checkConnectivityAndSync();
+      String? certificateUrl;
+      CertificateModel? certificate;
+
+      if (isOnline) {
+        final response = await SupabaseManager.client
+            .from('certificates')
+            .select()
+            .eq('id', event.certificateId)
+            .single();
+
+        certificate = CertificateModel.fromMap(response);
+        certificateUrl = certificate.certificateUrl;
+        if (certificateUrl == null) {
+          throw Exception('Certificate URL not found');
+        }
+
+        await HiveManager.certificatesBox.put(certificate.id, certificate);
+      } else {
+        certificate = HiveManager.certificatesBox.get(event.certificateId);
+        if (certificate == null) {
+          throw Exception('Certificate not available offline');
+        }
+        certificateUrl = certificate.certificateUrl;
+      }
+
+      // Request storage permission
+      var status = await Permission.storage.request();
+      if (!status.isGranted) {
+        emit(CertificatesError(message: 'Storage permission denied'));
+        return;
+      }
+
+      final response = await http.get(Uri.parse(certificateUrl));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to download certificate');
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final filePath = '${tempDir.path}/certificate_${event.certificateId}.pdf';
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      await CertificateService.markCertificateDownloaded(event.certificateId);
+
       emit(CertificateDownloaded(
         certificateId: event.certificateId,
         filePath: filePath,
       ));
-      
-      // Restore previous state with certificates list if available
+
       if (state is CertificatesLoaded) {
         final previousState = state as CertificatesLoaded;
         emit(CertificatesLoaded(certificates: previousState.certificates));
       }
     } catch (e) {
-      emit(CertificatesError(message: e.toString()));
+      emit(CertificatesError(message: AppError.fromException(e).message));
     }
   }
 
   Future<void> _onShareCertificate(ShareCertificateEvent event, Emitter<CertificatesState> emit) async {
-    emit(CertificateSharing(
-      certificateId: event.certificateId,
-      platform: event.platform,
-    ));
+    emit(CertificateSharing(certificateId: event.certificateId, platform: event.platform));
     try {
-      // Simulate sharing process
-      await Future.delayed(const Duration(seconds: 1));
-      
-      emit(CertificateShared(
-        certificateId: event.certificateId,
-        platform: event.platform,
-      ));
-      
-      // Restore previous state with certificates list if available
+      bool isOnline = await SyncService.checkConnectivityAndSync();
+      String? certificateUrl;
+      CertificateModel? certificate;
+
+      if (isOnline) {
+        final response = await SupabaseManager.client
+            .from('certificates')
+            .select()
+            .eq('id', event.certificateId)
+            .single();
+
+        certificate = CertificateModel.fromMap(response);
+        certificateUrl = certificate.certificateUrl;
+        if (certificateUrl == null) {
+          throw Exception('Certificate URL not found');
+        }
+
+        await HiveManager.certificatesBox.put(certificate.id, certificate);
+      } else {
+        certificate = HiveManager.certificatesBox.get(event.certificateId);
+        if (certificate == null) {
+          throw Exception('Certificate not available offline');
+        }
+        certificateUrl = certificate.certificateUrl;
+      }
+
+      final response = await http.get(Uri.parse(certificateUrl));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to download certificate for sharing');
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final filePath = '${tempDir.path}/certificate_${event.certificateId}.pdf';
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'Check out my certificate for ${certificate?.eventTitle ?? 'Event'}!',
+      );
+
+      emit(CertificateShared(certificateId: event.certificateId, platform: event.platform));
+
       if (state is CertificatesLoaded) {
         final previousState = state as CertificatesLoaded;
         emit(CertificatesLoaded(certificates: previousState.certificates));
       }
     } catch (e) {
-      emit(CertificatesError(message: e.toString()));
+      emit(CertificatesError(message: AppError.fromException(e).message));
     }
   }
 }

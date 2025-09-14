@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 // Screens
-import '../../features/certificates/certificates_screen.dart';
+// import '../../features/certificate/certificate_screen.dart';
+import '../../features/certificates/certificate_screen.dart';
 import '../../features/events/event_list_screen.dart';
 import '../../features/feedback/feedback_screen.dart';
 import '../../features/gallery/gallery_screen.dart';
@@ -88,7 +89,7 @@ class AppRouter {
           builder: (_) => ProfileScreen(userId: userId),
         );
       case AppConstants.certificatesRoute:
-        return MaterialPageRoute(builder: (_) => const CertificatesScreen());
+        return MaterialPageRoute(builder: (_) => const CertificateScreen());
 
         // 🔹 Additional Routes from AppConstants getters
         case AppConstants.galleryRoute:
@@ -106,7 +107,7 @@ class AppRouter {
         case AppConstants.createEventRoute:
           return MaterialPageRoute(builder: (_) => const EventListScreen());
         case AppConstants.certificateManagementRoute:
-          return MaterialPageRoute(builder: (_) => const CertificatesScreen());
+          return MaterialPageRoute(builder: (_) => const CertificateScreen());
         case AppConstants.participantsRoute:
           return MaterialPageRoute(builder: (_) => const MyEventsScreen());
       // 🔹 Settings

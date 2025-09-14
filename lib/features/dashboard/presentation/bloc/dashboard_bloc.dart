@@ -8,8 +8,12 @@ import 'package:fusion_fiesta/models/event_model.dart';
 import 'package:fusion_fiesta/models/notification_model.dart';
 import 'package:fusion_fiesta/models/feedback_model.dart';
 import 'package:fusion_fiesta/models/certificate_model.dart';
-import 'package:fusion_fiesta/supabase_manager.dart'; // Added import
+import 'package:fusion_fiesta/supabase_manager.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/services/AppError.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/sync_service.dart';
+import '../../../../storage/hive_manager.dart';
 
 abstract class DashboardEvent extends Equatable {
   const DashboardEvent();
@@ -29,6 +33,28 @@ class FetchDashboardDataEvent extends DashboardEvent {
 
   @override
   List<Object> get props => [userRole, userId];
+}
+
+class SearchEventsEvent extends DashboardEvent {
+  final String query;
+  final String? category;
+  final DateTime? startDate;
+  final DateTime? endDate;
+
+  const SearchEventsEvent({
+    required this.query,
+    this.category,
+    this.startDate,
+    this.endDate,
+  });
+
+  @override
+  List<Object> get props => [
+    query,
+    category ?? '',
+    startDate ?? DateTime(1970),
+    endDate ?? DateTime(1970),
+  ];
 }
 
 abstract class DashboardState extends Equatable {
@@ -63,12 +89,23 @@ class DashboardError extends DashboardState {
 class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   DashboardBloc() : super(DashboardInitial()) {
     on<FetchDashboardDataEvent>(_onFetchDashboardData);
+    on<SearchEventsEvent>(_onSearchEvents);
   }
 
   Future<void> _onFetchDashboardData(FetchDashboardDataEvent event, Emitter<DashboardState> emit) async {
     emit(DashboardLoading());
     try {
-      Map<String, dynamic> dashboardData = {};
+      Map<String, dynamic> dashboardData = {
+        'notifications': <NotificationModel>[],
+        'upcomingEvents': <EventModel>[],
+        'registeredEvents': <EventModel>[],
+        'certificates': <CertificateModel>[],
+        'createdEvents': <EventModel>[],
+        'pendingEvents': <EventModel>[],
+        'eventStats': <String, Map<String, dynamic>>{},
+        'eventFeedback': <String, List<FeedbackModel>>{},
+        'userStats': <String, dynamic>{},
+      };
 
       // Fetch notifications (common for all roles)
       final notificationsResult = await NotificationService.getNotifications(event.userId);
@@ -100,7 +137,6 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
         } else {
           print('Failed to load certificates: ${certificatesResult['error']}');
         }
-
       } else if (event.userRole == AppConstants.roleStaff) {
         // Organizer dashboard data
         final createdResult = await EventService.getCreatedEvents(event.userId);
@@ -131,33 +167,115 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
           }
         }
 
-      } else if (event.userRole == AppConstants.roleStaff && /* Check if admin, e.g., user.approved */ true) {
-        // Admin dashboard data
-        final pendingResult = await EventService.getPendingEvents();
-        if (pendingResult['success']) {
-          dashboardData['pendingEvents'] = pendingResult['events'] as List<EventModel>;
-        } else {
-          print('Failed to load pending events: ${pendingResult['error']}');
-        }
+        // Admin data (check if approved staff)
+        final user = EnhancedAuthService.getCurrentUser();
+        if (user?.approved == true) {
+          final pendingResult = await EventService.getPendingEvents();
+          if (pendingResult['success']) {
+            dashboardData['pendingEvents'] = pendingResult['events'] as List<EventModel>;
+          } else {
+            print('Failed to load pending events: ${pendingResult['error']}');
+          }
 
-        final allEventsResult = await EventService.getAllEvents();
-        if (allEventsResult['success']) {
-          dashboardData['allEvents'] = allEventsResult['events'] as List<EventModel>;
-        } else {
-          print('Failed to load all events: ${allEventsResult['error']}');
-        }
+          final allEventsResult = await EventService.getAllEvents();
+          if (allEventsResult['success']) {
+            dashboardData['allEvents'] = allEventsResult['events'] as List<EventModel>;
+          } else {
+            print('Failed to load all events: ${allEventsResult['error']}');
+          }
 
-        // Fetch user count using SupabaseManager.client
-        final userCountResponse = await SupabaseManager.client.from('users').select('count(*)');
-        final totalUsers = (userCountResponse as List).isNotEmpty ? (userCountResponse[0]['count'] as int?) ?? 0 : 0;
-        dashboardData['userStats'] = {
-          'totalUsers': totalUsers,
-        };
+          final userCountResponse = await SupabaseManager.client.from('users').select('count').single();
+          final totalUsers = userCountResponse['count'] as int? ?? 0;
+          dashboardData['userStats'] = {
+            'totalUsers': totalUsers,
+          };
+        }
       }
 
       emit(DashboardLoaded(dashboardData: dashboardData));
     } catch (e) {
-      emit(DashboardError(message: e.toString()));
+      emit(DashboardError(message: AppError.fromException(e).message));
+    }
+  }
+
+  Future<void> _onSearchEvents(SearchEventsEvent event, Emitter<DashboardState> emit) async {
+    emit(DashboardLoading());
+    try {
+      bool isOnline = await SyncService.checkConnectivityAndSync();
+      List<EventModel> filteredEvents = [];
+
+      if (isOnline) {
+        var query = SupabaseManager.client
+            .from('events')
+            .select()
+            .eq('status', AppConstants.statusApproved);
+
+        // Apply filters
+        if (event.query.isNotEmpty) {
+          query = query.ilike('title', '%${event.query}%');
+        }
+        if (event.category != null) {
+          query = query.eq('category', event.category!);
+        }
+        if (event.startDate != null && event.endDate != null) {
+          query = query
+              .gte('date', event.startDate!.toIso8601String().split('T')[0])
+              .lte('date', event.endDate!.toIso8601String().split('T')[0]);
+        }
+
+        final response = await query.order('date', ascending: true);
+        filteredEvents = response.map((data) => EventModel.fromMap(data)).toList();
+
+        for (final event in filteredEvents) {
+          await HiveManager.eventsBox.put(event.id, event);
+        }
+      } else {
+        filteredEvents = HiveManager.eventsBox.values
+            .where((e) => e.status == AppConstants.statusApproved)
+            .where((e) => event.query.isEmpty || e.title.toLowerCase().contains(event.query.toLowerCase()))
+            .where((e) => event.category == null || e.category == event.category)
+            .where((e) =>
+        event.startDate == null ||
+            e.dateTime.isAfter(event.startDate!) ||
+            e.dateTime.isAtSameMomentAs(event.startDate!))
+            .where((e) =>
+        event.endDate == null ||
+            e.dateTime.isBefore(event.endDate!) ||
+            e.dateTime.isAtSameMomentAs(event.endDate!))
+            .toList();
+      }
+
+      // Fetch registered events to maintain consistency
+      final user = EnhancedAuthService.getCurrentUser();
+      List<EventModel> registeredEvents = [];
+      List<CertificateModel> certificates = [];
+      List<NotificationModel> notifications = [];
+
+      if (user != null) {
+        final registeredResult = await EventService.getRegisteredEvents(user.id);
+        if (registeredResult['success']) {
+          registeredEvents = registeredResult['events'] as List<EventModel>;
+        }
+
+        final certificatesResult = await CertificateService.getUserCertificates(user.id);
+        if (certificatesResult['success']) {
+          certificates = certificatesResult['certificates'] as List<CertificateModel>;
+        }
+
+        final notificationsResult = await NotificationService.getNotifications(user.id);
+        if (notificationsResult['success']) {
+          notifications = notificationsResult['notifications'] as List<NotificationModel>;
+        }
+      }
+
+      emit(DashboardLoaded(dashboardData: {
+        'upcomingEvents': filteredEvents,
+        'registeredEvents': registeredEvents,
+        'certificates': certificates,
+        'notifications': notifications,
+      }));
+    } catch (e) {
+      emit(DashboardError(message: AppError.fromException(e).message));
     }
   }
 }

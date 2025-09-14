@@ -135,7 +135,10 @@ class EventService {
             .eq('user_id', userId)
             .eq('status', 'registered');
 
-        events = response.map((data) => EventModel.fromMap(data['events'])).toList();
+        events = response
+            .where((data) => data['events'] != null)
+            .map((data) => EventModel.fromMap(data['events']))
+            .toList();
       } else {
         final registrations = HiveManager.registrationsBox.values
             .where((r) => r.userId == userId && r.status == 'registered')

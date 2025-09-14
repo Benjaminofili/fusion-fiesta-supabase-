@@ -1,5 +1,6 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/certificate_model.dart';
+import '../models/media_gallery_model.dart';
 import '../models/notification_model.dart';
 import '../models/user_model.dart';
 import '../models/event_model.dart';
@@ -21,6 +22,7 @@ class HiveManager {
     Hive.registerAdapter(FeedbackModelAdapter());
     Hive.registerAdapter(CertificateModelAdapter());
     Hive.registerAdapter(NotificationModelAdapter());
+    Hive.registerAdapter(MediaGalleryModelAdapter());
 
     // Open boxes
     await Hive.openBox<UserModel>('users');
@@ -29,6 +31,7 @@ class HiveManager {
     await Hive.openBox<FeedbackModel>('feedback');
     await Hive.openBox<CertificateModel>('certificates');
     await Hive.openBox<NotificationModel>('notifications');
+    await Hive.openBox<MediaGalleryModel>('media_gallery');
     await Hive.openBox('app_meta');
     await Hive.openBox('offline_queue');
 
@@ -42,6 +45,7 @@ class HiveManager {
   static Box<FeedbackModel> get feedbackBox => Hive.box<FeedbackModel>('feedback');
   static Box<NotificationModel> get notificationsBox => Hive.box<NotificationModel>('notifications');
   static Box<CertificateModel> get certificatesBox => Hive.box<CertificateModel>('certificates');
+  static Box<MediaGalleryModel> get mediaGalleryBox => Hive.box<MediaGalleryModel>('media_gallery');
   static Box get metaBox => Hive.box('app_meta');
   static Box get offlineBox => Hive.box('offline_queue');
 }
