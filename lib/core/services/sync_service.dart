@@ -52,6 +52,12 @@ class SyncService {
             case 'notification_creation':
               await _supabase.from('notifications').insert(data['data']);
               break;
+            case 'bookmark_creation':
+              await _supabase.from('bookmarks').insert(data['data']);
+              break;
+            case 'bookmark_deletion':
+              await _supabase.from('bookmarks').delete().eq('id', data['data']['id']);
+              break;
           }
 
           await HiveManager.offlineBox.delete(item.key);

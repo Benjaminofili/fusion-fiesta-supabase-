@@ -25,6 +25,7 @@ class DashboardService {
       Map<String, dynamic> dashboardData = {
         'upcomingEvents': <EventModel>[],
         'registeredEvents': <EventModel>[],
+        'bookmarkedEvents': <EventModel>[],
         'certificates': <CertificateModel>[],
         'notifications': <NotificationModel>[],
         'createdEvents': <EventModel>[],

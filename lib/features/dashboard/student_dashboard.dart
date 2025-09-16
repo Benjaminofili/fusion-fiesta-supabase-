@@ -14,6 +14,7 @@ import '../../core/services/sync_service.dart';
 import '../../core/services/event_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/certificate_service.dart';
+import '../../core/services/bookmark_service.dart'; // Added bookmark service
 import '../../core/services/auth_service.dart';
 import '../../models/event_model.dart';
 import '../../models/certificate_model.dart';
@@ -39,14 +40,13 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this); // Updated to 5 tabs
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         setState(() {});
       }
     });
 
-    // Fetch data on init
     final user = EnhancedAuthService.getCurrentUser();
     if (user != null) {
       context.read<DashboardBloc>().add(FetchDashboardDataEvent(
@@ -74,6 +74,14 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
       _isSearching = !_isSearching;
       if (!_isSearching) {
         _searchController.clear();
+        // Reset to show all events
+        final user = EnhancedAuthService.getCurrentUser();
+        if (user != null) {
+          context.read<DashboardBloc>().add(FetchDashboardDataEvent(
+            userRole: user.role,
+            userId: user.id,
+          ));
+        }
       }
     });
   }
@@ -98,7 +106,11 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     final result = await EventService.registerForEvent(eventId);
     if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registered successfully')),
+        SnackBar(
+          content: const Text('Registered successfully'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
 
       // Refresh data
@@ -111,7 +123,43 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: ${result['error']}')),
+        SnackBar(
+          content: Text('Registration failed: ${result['error']}'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleBookmark(String eventId) async {
+    final result = await BookmarkService.toggleBookmark(eventId);
+    if (result['success']) {
+      final message = result['message'] as String;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Refresh data to update bookmark status
+      final user = EnhancedAuthService.getCurrentUser();
+      if (user != null) {
+        context.read<DashboardBloc>().add(FetchDashboardDataEvent(
+          userRole: user.role,
+          userId: user.id,
+        ));
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update bookmark: ${result['error']}'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -258,8 +306,6 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     );
   }
 
-
-
   String _getTimeAgo(DateTime date) {
     final difference = DateTime.now().difference(date);
     if (difference.inDays > 0) {
@@ -274,6 +320,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final theme = Theme.of(context);
@@ -285,12 +332,14 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
         // Extract data from state
         List<EventModel> upcomingEvents = [];
         List<EventModel> registeredEvents = [];
+        List<EventModel> bookmarkedEvents = [];
         List<CertificateModel> certificates = [];
         List<NotificationModel> notifications = [];
 
         if (state is DashboardLoaded) {
           upcomingEvents = state.dashboardData['upcomingEvents'] ?? [];
           registeredEvents = state.dashboardData['registeredEvents'] ?? [];
+          bookmarkedEvents = state.dashboardData['bookmarkedEvents'] ?? [];
           certificates = state.dashboardData['certificates'] ?? [];
           notifications = state.dashboardData['notifications'] ?? [];
         }
@@ -307,9 +356,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
               : _selectedIndex == 0
               ? _buildHomeContent(theme, isDarkMode, size, upcomingEvents, registeredEvents, certificates, user?.id ?? '')
               : _selectedIndex == 1
-              ? _buildCertificatesContent(theme, isDarkMode, certificates)
-              : _selectedIndex == 2
-              ? _buildCalendarContent(theme, isDarkMode, registeredEvents)
+              ? _buildBookmarksContent(theme, isDarkMode, bookmarkedEvents)
               : _selectedIndex == 2
               ? _buildNotificationsContent(theme, isDarkMode, notifications)
               : _buildProfileContent(theme, isDarkMode, user),
@@ -341,9 +388,18 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
           border: InputBorder.none,
         ),
         style: theme.textTheme.titleMedium,
-        onSubmitted: (value) {
-          // TODO: Implement search functionality
-          _toggleSearch();
+        onChanged: (value) {
+          if (value.isNotEmpty) {
+            context.read<DashboardBloc>().add(SearchEventsEvent(query: value));
+          } else {
+            final user = EnhancedAuthService.getCurrentUser();
+            if (user != null) {
+              context.read<DashboardBloc>().add(FetchDashboardDataEvent(
+                userRole: user.role,
+                userId: user.id,
+              ));
+            }
+          }
         },
       )
           : Text(
@@ -370,7 +426,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
         ),
         IconButton(
           icon: Badge(
-            label: const Text('0'), // You can update this with actual notification count
+            label: const Text('0'),
             isLabelVisible: false,
             child: Icon(
               Icons.notifications_outlined,
@@ -437,6 +493,15 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
             onTap: () {
               Navigator.pop(context);
               _onItemTapped(0);
+            },
+            theme: theme,
+          ),
+          _buildDrawerItem(
+            icon: Icons.bookmark_outlined,
+            title: 'Bookmarks',
+            onTap: () {
+              Navigator.pop(context);
+              _onItemTapped(1);
             },
             theme: theme,
           ),
@@ -655,7 +720,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
             const SizedBox(height: 16),
 
             SizedBox(
-              height: 280,
+              height: 320, // Increased height to accommodate bookmark button
               child: filteredUpcomingEvents.isEmpty
                   ? Center(
                 child: Column(
@@ -682,13 +747,17 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
                   final event = filteredUpcomingEvents.elementAt(index);
                   final isRegistered = HiveManager.registrationsBox.values
                       .any((r) => r.eventId == event.id && r.userId == userId && r.status == 'registered');
-                  return _buildEventCard(
+                  final isBookmarked = BookmarkService.isEventBookmarked(event.id, userId);
+
+                  return _buildEnhancedEventCard(
                     event: event,
                     theme: theme,
                     isDarkMode: isDarkMode,
                     index: index,
                     isRegistered: isRegistered,
+                    isBookmarked: isBookmarked,
                     onRegister: () => _registerForEvent(event.id),
+                    onBookmark: () => _toggleBookmark(event.id),
                   );
                 },
               ),
@@ -748,6 +817,21 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
                     ),
                   ),
                   const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () => _onItemTapped(0), // Go to home tab
+                    icon: const Icon(Icons.explore),
+                    label: const Text('Explore Events'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: theme.colorScheme.onPrimary,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
                 ],
               ),
             )
@@ -757,17 +841,201 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
               itemCount: registeredEvents.length,
               itemBuilder: (context, index) {
                 final event = registeredEvents[index];
+                final isBookmarked = BookmarkService.isEventBookmarked(event.id, userId);
                 return _buildRegisteredEventCard(
                   event: event,
                   theme: theme,
                   isDarkMode: isDarkMode,
                   index: index,
+                  isBookmarked: isBookmarked,
+                  onBookmark: () => _toggleBookmark(event.id),
                 );
               },
             ).animate()
                 .fade(duration: 500.ms, delay: 800.ms),
 
+            const SizedBox(height: 20),
+            // Certificates section
+            _buildCertificatesSection(theme).animate()
+                .fade(duration: 500.ms, delay: 900.ms),
+
             const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookmarksContent(ThemeData theme, bool isDarkMode, List<EventModel> bookmarkedEvents) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.bookmark,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Bookmarked Events',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Events you\'ve saved for later',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onBackground.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            bookmarkedEvents.isEmpty
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 60),
+                  Icon(
+                    Icons.bookmark_border,
+                    size: 80,
+                    color: theme.colorScheme.onBackground.withOpacity(0.3),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No bookmarked events',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onBackground.withOpacity(0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Start bookmarking events you\'re interested in',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onBackground.withOpacity(0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () => _onItemTapped(0), // Go to home tab
+                    icon: const Icon(Icons.explore),
+                    label: const Text('Explore Events'),
+                  ),
+                ],
+              ),
+            )
+                : GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 0.75,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: bookmarkedEvents.length,
+              itemBuilder: (context, index) {
+                final event = bookmarkedEvents[index];
+                final user = EnhancedAuthService.getCurrentUser();
+                final isRegistered = user != null ? HiveManager.registrationsBox.values
+                    .any((r) => r.eventId == event.id && r.userId == user.id && r.status == 'registered') : false;
+
+                return _buildBookmarkCard(
+                  event: event,
+                  theme: theme,
+                  isDarkMode: isDarkMode,
+                  index: index,
+                  isRegistered: isRegistered,
+                  onRegister: () => _registerForEvent(event.id),
+                  onRemoveBookmark: () => _toggleBookmark(event.id),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCertificatesSection(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'My Certificates',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Navigate to full certificates page
+                },
+                child: const Text('View All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Show recent certificates or empty state
+          _buildCertificatePreview(theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCertificatePreview(ThemeData theme) {
+    // If no certificates
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: theme.colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Icon(
+              Icons.workspace_premium,
+              size: 40,
+              color: theme.colorScheme.primary.withOpacity(0.7),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No certificates yet',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Complete events to earn certificates',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -781,33 +1049,69 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Your Certificates',
-              style: theme.textTheme.headlineSmall,
+            Row(
+              children: [
+                Icon(
+                  Icons.card_membership,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Your Certificates',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Text(
+              'Download and manage your event certificates',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onBackground.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
             certificates.isEmpty
-                ? const Center(child: Text('No certificates available'))
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 60),
+                  Icon(
+                    Icons.card_membership_outlined,
+                    size: 80,
+                    color: theme.colorScheme.onBackground.withOpacity(0.3),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No certificates available',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onBackground.withOpacity(0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Complete events to earn certificates',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onBackground.withOpacity(0.5),
+                    ),
+                  ),
+                ],
+              ),
+            )
                 : ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: certificates.length,
               itemBuilder: (context, index) {
                 final certificate = certificates[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: ListTile(
-                    leading: const Icon(Icons.card_membership),
-                    title: Text(certificate.eventTitle ?? 'Certificate ${certificate.id}'),
-                    subtitle: Text('Issued: ${DateFormat('MMM d, yyyy').format(certificate.issuedAt)}'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.download),
-                      onPressed: () => _downloadCertificate(certificate.id),
-                    ),
-                    onTap: () {
-                      Navigator.pushNamed(context, '/certificate', arguments: certificate);
-                    },
-                  ),
+                return _buildCertificateCard(
+                  certificate: certificate,
+                  theme: theme,
+                  isDarkMode: isDarkMode,
+                  index: index,
                 );
               },
             ),
@@ -815,6 +1119,89 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
         ),
       ),
     );
+  }
+
+  Widget _buildCertificateCard({
+    required CertificateModel certificate,
+    required ThemeData theme,
+    required bool isDarkMode,
+    required int index,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: isDarkMode ? theme.colorScheme.surface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            Icons.card_membership,
+            color: theme.colorScheme.primary,
+            size: 24,
+          ),
+        ),
+        title: Text(
+          certificate.eventTitle ?? 'Certificate ${certificate.id}',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text('Issued: ${DateFormat('MMM d, yyyy').format(certificate.issuedAt)}'),
+            if (certificate.downloadedAt != null)
+              Text(
+                'Downloaded: ${DateFormat('MMM d, yyyy').format(certificate.downloadedAt!)}',
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.download),
+              onPressed: () => _downloadCertificate(certificate.id),
+              tooltip: 'Download Certificate',
+            ),
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: () {
+                // TODO: Implement share functionality
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Share functionality coming soon')),
+                );
+              },
+              tooltip: 'Share Certificate',
+            ),
+          ],
+        ),
+        onTap: () {
+          Navigator.pushNamed(context, '/certificate', arguments: certificate);
+        },
+      ),
+    ).animate()
+        .fade(duration: 500.ms, delay: 100.ms * index)
+        .slideY(begin: 0.1, end: 0, duration: 500.ms, curve: Curves.easeOutQuad);
   }
 
   Widget _buildCategoryCard({
@@ -861,20 +1248,22 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     );
   }
 
-  Widget _buildEventCard({
+  Widget _buildEnhancedEventCard({
     required EventModel event,
     required ThemeData theme,
     required bool isDarkMode,
     required int index,
     required bool isRegistered,
+    required bool isBookmarked,
     required VoidCallback onRegister,
+    required VoidCallback onBookmark,
   }) {
     final formattedDate = DateFormat('MMM dd, yyyy').format(event.dateTime);
 
     return GestureDetector(
       onTap: () => _navigateToEventDetails(event),
       child: Container(
-        width: 220,
+        width: 240,
         margin: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
           color: isDarkMode ? theme.colorScheme.surface : Colors.white,
@@ -890,121 +1279,158 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Event image
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-              child: event.bannerUrl != null
-                  ? Image.network(
-                event.bannerUrl!,
-                height: 120,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Image.asset(
-                  'assets/images/default_event.jpg',
-                  height: 120,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
+            // Event image with bookmark button
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                  child: event.bannerUrl != null
+                      ? Image.network(
+                    event.bannerUrl!,
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Image.asset(
+                      'assets/images/default_event.jpg',
+                      height: 120,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                      : Image.asset(
+                    'assets/images/default_event.jpg',
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
                 ),
-              )
-                  : Image.asset(
-                'assets/images/default_event.jpg',
-                height: 120,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: onBookmark, // Fixed: changed from onRemoveBookmark to onBookmark
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        // Changed icon based on bookmark status
+                        isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                        color: isBookmarked ? theme.colorScheme.primary : Colors.grey[600],
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
 
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Event title
-                  Text(
-                    event.title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16), // Increased padding for better spacing
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Event title
+                    Text(
+                      event.title,
+                      style: theme.textTheme.titleMedium?.copyWith( // Changed from titleSmall
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
 
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
 
-                  // Event date
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 16,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        formattedDate,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onBackground.withOpacity(0.7),
+                    // Event date
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 16, // Slightly larger icon
+                          color: theme.colorScheme.primary,
                         ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  // Event location
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.location_on,
-                        size: 16,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          event.venue,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onBackground.withOpacity(0.7),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            formattedDate,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onBackground.withOpacity(0.7),
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Register button
-                  isRegistered
-                      ? OutlinedButton(
-                    onPressed: null,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: theme.colorScheme.primary,
-                      side: BorderSide(color: theme.colorScheme.primary),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ],
                     ),
-                    child: const Text('Registered'),
-                  )
-                      : ElevatedButton(
-                    onPressed: onRegister,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: theme.colorScheme.onPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+
+                    const SizedBox(height: 4),
+
+                    // Event location
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on,
+                          size: 16, // Slightly larger icon
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            event.venue,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onBackground.withOpacity(0.7),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const Text('Register'),
-                  ),
-                ],
+
+                    const Spacer(),
+
+                    // Register button
+                    SizedBox(
+                      width: double.infinity,
+                      child: isRegistered
+                          ? OutlinedButton(
+                        onPressed: null,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: theme.colorScheme.primary,
+                          side: BorderSide(color: theme.colorScheme.primary),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
+                        child: const Text('Registered'),
+                      )
+                          : ElevatedButton(
+                        onPressed: onRegister,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: theme.colorScheme.onPrimary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
+                        child: const Text('Register'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -1020,6 +1446,8 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     required ThemeData theme,
     required bool isDarkMode,
     required int index,
+    required bool isBookmarked,
+    required VoidCallback onBookmark,
   }) {
     final formattedDate = DateFormat('MMM dd, yyyy').format(event.dateTime);
 
@@ -1131,20 +1559,233 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
               ),
             ),
 
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'Registered',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.bold,
+            Column(
+              children: [
+                // Bookmark button
+                GestureDetector(
+                  onTap: onBookmark,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                      color: isBookmarked ? theme.colorScheme.primary : Colors.grey[600],
+                      size: 24,
+                    ),
                   ),
+                ),
+                // Registered badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Registered',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+          ],
+        ),
+      ),
+    ).animate()
+        .fade(duration: 500.ms, delay: 100.ms * index)
+        .slideX(begin: 0.1, end: 0, duration: 500.ms, curve: Curves.easeOutQuad);
+  }
+
+  Widget _buildBookmarkCard({
+    required EventModel event,
+    required ThemeData theme,
+    required bool isDarkMode,
+    required int index,
+    required bool isRegistered,
+    required VoidCallback onRegister,
+    required VoidCallback onRemoveBookmark,
+  }) {
+    final formattedDate = DateFormat('MMM dd, yyyy').format(event.dateTime);
+
+    return GestureDetector(
+      onTap: () => _navigateToEventDetails(event),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDarkMode ? theme.colorScheme.surface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Event image with remove bookmark button
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                  child: event.bannerUrl != null
+                      ? Image.network(
+                    event.bannerUrl!,
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Image.asset(
+                      'assets/images/default_event.jpg',
+                      height: 120,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                      : Image.asset(
+                    'assets/images/default_event.jpg',
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: onRemoveBookmark,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.bookmark_remove,
+                        color: Colors.red[600],
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Event title
+                    Text(
+                      event.title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Event date
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 14,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            formattedDate,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onBackground.withOpacity(0.7),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // Event location
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on,
+                          size: 14,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            event.venue,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onBackground.withOpacity(0.7),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const Spacer(),
+
+                    // Register button
+                    SizedBox(
+                      width: double.infinity,
+                      child: isRegistered
+                          ? Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: theme.colorScheme.primary),
+                        ),
+                        child: Text(
+                          'Registered',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                          : ElevatedButton(
+                        onPressed: onRegister,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: theme.colorScheme.onPrimary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        child: Text(
+                          'Register',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1153,7 +1794,72 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
       ),
     ).animate()
         .fade(duration: 500.ms, delay: 100.ms * index)
-        .slideX(begin: 0.1, end: 0, duration: 500.ms, curve: Curves.easeOutQuad);
+        .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.0, 1.0),
+        duration: 500.ms, curve: Curves.easeOutQuad);
+  }
+
+  // Complete the registered events section that was cut off
+  Widget _buildRegisteredEventsSection(ThemeData theme, bool isDarkMode,
+      List<EventModel> registeredEvents, String userId) {
+    return registeredEvents.isEmpty
+        ? Center(
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          Icon(
+            Icons.event_busy,
+            size: 80,
+            color: theme.colorScheme.onBackground.withOpacity(0.3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No registered events',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onBackground.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Explore and register for events',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onBackground.withOpacity(0.5),
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () => _onItemTapped(0), // Go to home tab
+            icon: const Icon(Icons.explore),
+            label: const Text('Explore Events'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
+        ],
+      ),
+    )
+        : ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: registeredEvents.length,
+      itemBuilder: (context, index) {
+        final event = registeredEvents[index];
+        final isBookmarked = BookmarkService.isEventBookmarked(event.id, userId);
+        return _buildRegisteredEventCard(
+          event: event,
+          theme: theme,
+          isDarkMode: isDarkMode,
+          index: index,
+          isBookmarked: isBookmarked,
+          onBookmark: () => _toggleBookmark(event.id),
+        );
+      },
+    ).animate()
+        .fade(duration: 500.ms, delay: 800.ms);
   }
 
   Widget _buildCalendarContent(ThemeData theme, bool isDarkMode, List<EventModel> registeredEvents) {
@@ -1384,9 +2090,9 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
                 theme: theme,
               ),
               _buildNavBarItem(
-                icon: Icons.calendar_today_outlined,
-                activeIcon: Icons.calendar_today,
-                label: 'Calendar',
+                icon: Icons.bookmark_outlined,
+                activeIcon: Icons.bookmark,
+                label: 'Bookmarks',
                 index: 1,
                 theme: theme,
               ),
@@ -1450,7 +2156,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
       ),
     );
   }
-}
+ }
 
 extension StringExtension on String {
   String capitalize() {

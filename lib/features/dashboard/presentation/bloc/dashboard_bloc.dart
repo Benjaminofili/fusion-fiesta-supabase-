@@ -4,6 +4,7 @@ import 'package:fusion_fiesta/core/services/event_service.dart';
 import 'package:fusion_fiesta/core/services/notification_service.dart';
 import 'package:fusion_fiesta/core/services/feedback_service.dart';
 import 'package:fusion_fiesta/core/services/certificate_service.dart';
+import 'package:fusion_fiesta/core/services/bookmark_service.dart'; // Added bookmark service
 import 'package:fusion_fiesta/models/event_model.dart';
 import 'package:fusion_fiesta/models/notification_model.dart';
 import 'package:fusion_fiesta/models/feedback_model.dart';
@@ -57,6 +58,15 @@ class SearchEventsEvent extends DashboardEvent {
   ];
 }
 
+class RefreshBookmarksEvent extends DashboardEvent {
+  final String userId;
+
+  const RefreshBookmarksEvent({required this.userId});
+
+  @override
+  List<Object> get props => [userId];
+}
+
 abstract class DashboardState extends Equatable {
   const DashboardState();
 
@@ -90,6 +100,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   DashboardBloc() : super(DashboardInitial()) {
     on<FetchDashboardDataEvent>(_onFetchDashboardData);
     on<SearchEventsEvent>(_onSearchEvents);
+    on<RefreshBookmarksEvent>(_onRefreshBookmarks);
   }
 
   Future<void> _onFetchDashboardData(FetchDashboardDataEvent event, Emitter<DashboardState> emit) async {
@@ -99,6 +110,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
         'notifications': <NotificationModel>[],
         'upcomingEvents': <EventModel>[],
         'registeredEvents': <EventModel>[],
+        'bookmarkedEvents': <EventModel>[], // Added bookmarked events
         'certificates': <CertificateModel>[],
         'createdEvents': <EventModel>[],
         'pendingEvents': <EventModel>[],
@@ -129,6 +141,14 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
           dashboardData['registeredEvents'] = registeredResult['events'] as List<EventModel>;
         } else {
           print('Failed to load registered events: ${registeredResult['error']}');
+        }
+
+        // Fetch bookmarked events
+        final bookmarkedResult = await BookmarkService.getBookmarkedEvents(event.userId);
+        if (bookmarkedResult['success']) {
+          dashboardData['bookmarkedEvents'] = bookmarkedResult['events'] as List<EventModel>;
+        } else {
+          print('Failed to load bookmarked events: ${bookmarkedResult['error']}');
         }
 
         final certificatesResult = await CertificateService.getUserCertificates(event.userId);
@@ -198,6 +218,21 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     }
   }
 
+  Future<void> _onRefreshBookmarks(RefreshBookmarksEvent event, Emitter<DashboardState> emit) async {
+    try {
+      // Sync bookmarks with server
+      await BookmarkService.syncBookmarks(event.userId);
+
+      // Refresh dashboard data
+      final user = EnhancedAuthService.getCurrentUser();
+      if (user != null) {
+        add(FetchDashboardDataEvent(userRole: user.role, userId: user.id));
+      }
+    } catch (e) {
+      print('Failed to refresh bookmarks: ${AppError.fromException(e).message}');
+    }
+  }
+
   Future<void> _onSearchEvents(SearchEventsEvent event, Emitter<DashboardState> emit) async {
     emit(DashboardLoading());
     try {
@@ -245,9 +280,10 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
             .toList();
       }
 
-      // Fetch registered events to maintain consistency
+      // Fetch registered events, bookmarked events, and other data to maintain consistency
       final user = EnhancedAuthService.getCurrentUser();
       List<EventModel> registeredEvents = [];
+      List<EventModel> bookmarkedEvents = [];
       List<CertificateModel> certificates = [];
       List<NotificationModel> notifications = [];
 
@@ -255,6 +291,11 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
         final registeredResult = await EventService.getRegisteredEvents(user.id);
         if (registeredResult['success']) {
           registeredEvents = registeredResult['events'] as List<EventModel>;
+        }
+
+        final bookmarkedResult = await BookmarkService.getBookmarkedEvents(user.id);
+        if (bookmarkedResult['success']) {
+          bookmarkedEvents = bookmarkedResult['events'] as List<EventModel>;
         }
 
         final certificatesResult = await CertificateService.getUserCertificates(user.id);
@@ -271,6 +312,7 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
       emit(DashboardLoaded(dashboardData: {
         'upcomingEvents': filteredEvents,
         'registeredEvents': registeredEvents,
+        'bookmarkedEvents': bookmarkedEvents, // Include bookmarked events in search results
         'certificates': certificates,
         'notifications': notifications,
       }));

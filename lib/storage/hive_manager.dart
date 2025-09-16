@@ -1,4 +1,5 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/bookmark_model.dart';
 import '../models/certificate_model.dart';
 import '../models/media_gallery_model.dart';
 import '../models/notification_model.dart';
@@ -23,6 +24,7 @@ class HiveManager {
     Hive.registerAdapter(CertificateModelAdapter());
     Hive.registerAdapter(NotificationModelAdapter());
     Hive.registerAdapter(MediaGalleryModelAdapter());
+    Hive.registerAdapter(BookmarkModelAdapter());
 
     // Open boxes
     await Hive.openBox<UserModel>('users');
@@ -32,6 +34,7 @@ class HiveManager {
     await Hive.openBox<CertificateModel>('certificates');
     await Hive.openBox<NotificationModel>('notifications');
     await Hive.openBox<MediaGalleryModel>('media_gallery');
+    await Hive.openBox<BookmarkModel>('bookmarks');
     await Hive.openBox('app_meta');
     await Hive.openBox('offline_queue');
 
@@ -46,6 +49,7 @@ class HiveManager {
   static Box<NotificationModel> get notificationsBox => Hive.box<NotificationModel>('notifications');
   static Box<CertificateModel> get certificatesBox => Hive.box<CertificateModel>('certificates');
   static Box<MediaGalleryModel> get mediaGalleryBox => Hive.box<MediaGalleryModel>('media_gallery');
+  static Box<BookmarkModel> get bookmarksBox => Hive.box<BookmarkModel>('bookmarks');
   static Box get metaBox => Hive.box('app_meta');
   static Box get offlineBox => Hive.box('offline_queue');
 }

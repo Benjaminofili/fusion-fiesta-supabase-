@@ -1,6 +1,6 @@
 import 'package:hive/hive.dart';
-
 import '../core/constants/app_constants.dart';
+import '../storage/hive_manager.dart';
 
 part 'event_model.g.dart';
 
@@ -22,7 +22,7 @@ class EventModel extends HiveObject {
   final String? department;
 
   @HiveField(5)
-  final DateTime dateTime; // Combined from date and time in Supabase
+  final DateTime dateTime;
 
   @HiveField(6)
   final String venue;
@@ -34,16 +34,16 @@ class EventModel extends HiveObject {
   final String? organizerId;
 
   @HiveField(9)
-  final int maxParticipants;
+  final int? maxParticipants; // Changed to nullable
 
   @HiveField(10)
-  final int currentParticipants;
+  final int? currentParticipants; // Changed to nullable
 
   @HiveField(11)
   final String? bannerUrl;
 
   @HiveField(12)
-  final double cost;
+  final double? cost; // Changed to nullable
 
   @HiveField(13)
   final DateTime? registrationDeadline;
@@ -57,6 +57,12 @@ class EventModel extends HiveObject {
   @HiveField(16)
   final DateTime updatedAt;
 
+  @HiveField(17)
+  final bool? isBookmarked;
+
+  @HiveField(18)
+  final int? registrationsCount;
+
   EventModel({
     required this.id,
     required this.title,
@@ -67,18 +73,19 @@ class EventModel extends HiveObject {
     required this.venue,
     required this.status,
     this.organizerId,
-    required this.maxParticipants,
-    required this.currentParticipants,
+    this.maxParticipants, // Updated constructor
+    this.currentParticipants, // Updated constructor
     this.bannerUrl,
-    required this.cost,
+    this.cost, // Updated constructor
     this.registrationDeadline,
     required this.eventType,
     required this.createdAt,
     required this.updatedAt,
+    this.isBookmarked = false,
+    this.registrationsCount = 0,
   });
 
   factory EventModel.fromMap(Map<String, dynamic> map) {
-    // Handle null String fields with defaults
     final id = map['id'] as String? ?? 'unknown_id';
     final title = map['title'] as String? ?? 'Untitled Event';
     final description = map['description'] as String? ?? 'No description';
@@ -86,17 +93,8 @@ class EventModel extends HiveObject {
     final venue = map['venue'] as String? ?? 'Unknown Venue';
     final status = map['status'] as String? ?? AppConstants.statusPending;
     final organizerId = map['organizer_id'] as String?;
-    final eventType = map['event_type'] as String? ?? 'academic'; // Default value
-
-    // Handle date and time combination
-    final date = map['date'] as String?;
-    final time = map['time'] as String?;
-    DateTime dateTime;
-    try {
-      dateTime = DateTime.parse('${date ?? '1970-01-01'} ${time ?? '00:00:00'}');
-    } catch (e) {
-      dateTime = DateTime.now(); // Fallback to current time if parsing fails
-    }
+    final dateTime = DateTime.parse('${map['date']}T${map['time']}:00.000Z');
+    final eventType = map['event_type'] as String? ?? 'academic';
 
     return EventModel(
       id: id,
@@ -108,16 +106,18 @@ class EventModel extends HiveObject {
       venue: venue,
       status: status,
       organizerId: organizerId,
-      maxParticipants: (map['max_participants'] as int?) ?? 0,
-      currentParticipants: (map['current_participants'] as int?) ?? 0,
+      maxParticipants: map['max_participants'] as int?,
+      currentParticipants: map['current_participants'] as int?,
       bannerUrl: map['banner_url'] as String?,
-      cost: (map['cost'] as num?)?.toDouble() ?? 0.0,
+      cost: (map['cost'] as num?)?.toDouble(),
       registrationDeadline: map['registration_deadline'] != null
           ? DateTime.parse(map['registration_deadline'] as String)
           : null,
       eventType: eventType,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
+      isBookmarked: map['is_bookmarked'] as bool?,
+      registrationsCount: map['registrations_count'] as int?,
     );
   }
 
@@ -141,13 +141,18 @@ class EventModel extends HiveObject {
       'event_type': eventType,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'is_bookmarked': isBookmarked,
+      'registrations_count': registrationsCount,
     };
   }
 
-  // Add isRegistered based on registrations
   bool get isRegistered {
-    // This requires checking registrations table - implement in service or here if data is joined
-    // For now, placeholder - update with actual logic
-    return false; // Replace with logic using registrations data
+    return HiveManager.registrationsBox.values.any((r) => r.eventId == id && r.status == 'registered');
   }
+
+  bool get hasSlotsAvailable {
+    return (currentParticipants ?? 0) < (maxParticipants ?? 0); // Handle null with defaults
+  }
+
+
 }
