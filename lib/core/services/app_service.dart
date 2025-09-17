@@ -11,7 +11,7 @@ class AppService {
     try {
       print('🔄 Initializing app services...');
 
-      // Initialize Hive first
+      // Initialize Hive (with built-in error handling and data clearing if needed)
       await HiveManager.init();
       print('✅ Hive initialized');
 
@@ -21,7 +21,6 @@ class AppService {
 
       _initialized = true;
       print('✅ App services initialized successfully');
-
     } catch (e) {
       print('❌ App initialization failed: $e');
       rethrow;

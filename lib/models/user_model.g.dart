@@ -26,19 +26,20 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       enrollmentNumber: fields[6] as String?,
       department: fields[7] as String?,
       collegeIdProofUrl: fields[8] as String?,
-      approved: fields[9] as bool,
-      isLocalOnly: fields[10] as bool,
-      sessionToken: fields[11] as String?,
-      createdAt: fields[12] as DateTime?,
-      updatedAt: fields[13] as DateTime?,
-      lastModified: fields[14] as DateTime?,
+      profilePictureUrl: fields[9] as String?,
+      approved: fields[10] as bool,
+      isLocalOnly: fields[11] as bool,
+      sessionToken: fields[12] as String?,
+      createdAt: fields[13] as DateTime?,
+      updatedAt: fields[14] as DateTime?,
+      lastModified: fields[15] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserModel obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -58,16 +59,18 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       ..writeByte(8)
       ..write(obj.collegeIdProofUrl)
       ..writeByte(9)
-      ..write(obj.approved)
+      ..write(obj.profilePictureUrl)
       ..writeByte(10)
-      ..write(obj.isLocalOnly)
+      ..write(obj.approved)
       ..writeByte(11)
-      ..write(obj.sessionToken)
+      ..write(obj.isLocalOnly)
       ..writeByte(12)
-      ..write(obj.createdAt)
+      ..write(obj.sessionToken)
       ..writeByte(13)
-      ..write(obj.updatedAt)
+      ..write(obj.createdAt)
       ..writeByte(14)
+      ..write(obj.updatedAt)
+      ..writeByte(15)
       ..write(obj.lastModified);
   }
 

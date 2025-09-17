@@ -66,7 +66,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _onGetStartedPressed() {
     // Change this if you don't have login, replace with registerRoute
-    Navigator.pushReplacementNamed(context, AppConstants.registerRoute);
+    Navigator.pushReplacementNamed(context, AppConstants.loginRoute);
   }
 
   void _onSkipPressed() {

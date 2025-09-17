@@ -23,6 +23,7 @@ import 'package:fusion_fiesta/core/navigation/app_router.dart';
 import 'core/services/app_service.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   try {
     await AppService.initialize();
     print('✅ App initialized successfully');

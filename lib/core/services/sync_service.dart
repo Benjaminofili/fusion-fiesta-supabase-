@@ -1,11 +1,15 @@
+import 'dart:io';
+import 'dart:convert';
 import '../../storage/hive_manager.dart';
 import '../../supabase_manager.dart';
 import '../constants/app_constants.dart';
 import 'AppError.dart';
+import 'auth_service.dart';
 
 class SyncService {
   static final _supabase = SupabaseManager.client;
 
+  // Sync offline data when online
   static Future<void> syncOfflineData() async {
     try {
       final offlineQueue = HiveManager.offlineBox.values.toList();
@@ -57,6 +61,29 @@ class SyncService {
               break;
             case 'bookmark_deletion':
               await _supabase.from('bookmarks').delete().eq('id', data['data']['id']);
+              break;
+            case 'profile_picture_update':
+              await _supabase
+                  .from('users')
+                  .update({'profile_picture_url': data['data']['profile_picture_url']})
+                  .eq('id', data['data']['id']);
+              break;
+            case 'profile_picture_upload':
+              final localPath = data['data']['local_path'] as String;
+              final file = File(localPath);
+              if (await file.exists()) {
+                final filePath = data['data']['file_path'] as String;
+                await _supabase.storage
+                    .from('profile_pictures')
+                    .upload(filePath, file);
+
+                final url = _supabase.storage
+                    .from('profile_pictures')
+                    .getPublicUrl(filePath);
+
+                await EnhancedAuthService.updateProfilePicture(url);
+                await file.delete(); // Clean up local file
+              }
               break;
           }
 

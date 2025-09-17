@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:http/http.dart' as http;
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +21,7 @@ import '../../core/services/auth_service.dart';
 import '../../models/event_model.dart';
 import '../../models/certificate_model.dart';
 import '../../models/notification_model.dart';
+import '../../models/user_model.dart';
 import '../../storage/hive_manager.dart';
 import '../../supabase_manager.dart';
 import 'presentation/bloc/dashboard_bloc.dart';
@@ -320,7 +323,6 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final theme = Theme.of(context);
@@ -359,7 +361,7 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
               ? _buildBookmarksContent(theme, isDarkMode, bookmarkedEvents)
               : _selectedIndex == 2
               ? _buildNotificationsContent(theme, isDarkMode, notifications)
-              : _buildProfileContent(theme, isDarkMode, user),
+              : _buildProfileContent(theme, isDarkMode),
           bottomNavigationBar: _buildBottomNavigationBar(theme, isDarkMode),
           floatingActionButton: _selectedIndex == 0
               ? FloatingActionButton(
@@ -373,7 +375,10 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     );
   }
 
+
   PreferredSizeWidget _buildAppBar(ThemeData theme, bool isDarkMode) {
+    final user = EnhancedAuthService.getCurrentUser(); // Fetch current user
+
     return AppBar(
       systemOverlayStyle: isDarkMode ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       backgroundColor: theme.appBarTheme.backgroundColor,
@@ -436,9 +441,16 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
           onPressed: _navigateToNotifications,
         ),
         IconButton(
-          icon: const CircleAvatar(
+          icon: CircleAvatar(
             radius: 14,
-            backgroundImage: AssetImage('assets/images/profile.jpg'),
+            backgroundImage: user?.profilePictureUrl != null
+                ? CachedNetworkImageProvider(user!.profilePictureUrl!)
+                : const AssetImage('assets/images/profile.jpg') as ImageProvider,
+            onBackgroundImageError: user?.profilePictureUrl != null
+                ? (error, stackTrace) {
+              print('Failed to load profile picture: $error');
+            }
+                : null,
           ),
           onPressed: _navigateToProfile,
         ),
@@ -2017,17 +2029,203 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
       return Icons.notifications;
     }
   }
+  // Profile picture upload functionality
+  Future<void> _uploadProfilePicture() async {
+    try {
+      final picker = FilePicker.platform;
+      final result = await picker.pickFiles(type: FileType.image);
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final uploadResult = await EnhancedAuthService.uploadProfilePicture(file);
+        if (uploadResult['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile picture updated successfully'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          // Refresh profile
+          final user = EnhancedAuthService.getCurrentUser();
+          if (user != null) {
+            context.read<DashboardBloc>().add(FetchDashboardDataEvent(
+              userRole: user.role,
+              userId: user.id,
+            ));
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update profile picture: ${uploadResult['error']}'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error uploading profile picture: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
-  Widget _buildProfileContent(ThemeData theme, bool isDarkMode, dynamic user) {
+
+  Future<void> _showProfilePictureOptions() async {
+    final user = EnhancedAuthService.getCurrentUser();
+    if (user == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurface.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Profile Picture',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: Icon(
+                  Icons.photo_library,
+                  color: theme.colorScheme.primary,
+                ),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _uploadProfilePicture();
+                },
+              ),
+              if (user.profilePictureUrl != null)
+                ListTile(
+                  leading: Icon(
+                    Icons.delete,
+                    color: Colors.red[600],
+                  ),
+                  title: const Text('Remove Photo'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _removeProfilePicture();
+                  },
+                ),
+              ListTile(
+                leading: Icon(
+                  Icons.cancel,
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                ),
+                title: const Text('Cancel'),
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _removeProfilePicture() async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Removing profile picture...'),
+            ],
+          ),
+        ),
+      );
+
+      final result = await EnhancedAuthService.updateProfilePicture('');
+
+      Navigator.pop(context);
+
+      if (result['success']) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Profile picture removed successfully'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        setState(() {});
+
+        final user = EnhancedAuthService.getCurrentUser();
+        if (user != null) {
+          context.read<DashboardBloc>().add(FetchDashboardDataEvent(
+            userRole: user.role,
+            userId: user.id,
+          ));
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove profile picture: ${result['error']}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildProfileContent(ThemeData theme, bool isDarkMode) {
+    final user = EnhancedAuthService.getCurrentUser(); // Fetch user dynamically
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircleAvatar(
+            CircleAvatar(
               radius: 50,
-              backgroundImage: AssetImage('assets/images/profile.jpg'),
+              backgroundImage: user?.profilePictureUrl != null
+                  ? NetworkImage(user!.profilePictureUrl!)
+                  : const AssetImage('assets/images/profile.jpg') as ImageProvider,
+              onBackgroundImageError: user?.profilePictureUrl != null
+                  ? (error, stackTrace) {
+                print('Failed to load profile picture: $error');
+              }
+                  : null,
             ),
             const SizedBox(height: 20),
             Text(
@@ -2045,18 +2243,27 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Refresh data
-                final user = EnhancedAuthService.getCurrentUser();
-                if (user != null) {
-                  context.read<DashboardBloc>().add(FetchDashboardDataEvent(
-                    userRole: user.role,
-                    userId: user.id,
-                  ));
-                }
-              },
-              child: const Text('Refresh Profile'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    final currentUser = EnhancedAuthService.getCurrentUser();
+                    if (currentUser != null) {
+                      context.read<DashboardBloc>().add(FetchDashboardDataEvent(
+                        userRole: currentUser.role,
+                        userId: currentUser.id,
+                      ));
+                    }
+                  },
+                  child: const Text('Refresh Profile'),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: _uploadProfilePicture,
+                  child: const Text('Update Profile Picture'),
+                ),
+              ],
             ),
           ],
         ),
@@ -2064,58 +2271,59 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     );
   }
 
-  Widget _buildBottomNavigationBar(ThemeData theme, bool isDarkMode) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDarkMode ? theme.colorScheme.surface : Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildNavBarItem(
-                icon: Icons.home_outlined,
-                activeIcon: Icons.home,
-                label: 'Home',
-                index: 0,
-                theme: theme,
-              ),
-              _buildNavBarItem(
-                icon: Icons.bookmark_outlined,
-                activeIcon: Icons.bookmark,
-                label: 'Bookmarks',
-                index: 1,
-                theme: theme,
-              ),
-              _buildNavBarItem(
-                icon: Icons.notifications_outlined,
-                activeIcon: Icons.notifications,
-                label: 'Notifications',
-                index: 2,
-                theme: theme,
-              ),
-              _buildNavBarItem(
-                icon: Icons.person_outline,
-                activeIcon: Icons.person,
-                label: 'Profile',
-                index: 3,
-                theme: theme,
-              ),
-            ],
-          ),
+
+Widget _buildBottomNavigationBar(ThemeData theme, bool isDarkMode) {
+  return Container(
+    decoration: BoxDecoration(
+      color: isDarkMode ? theme.colorScheme.surface : Colors.white,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10,
+          offset: const Offset(0, -5),
+        ),
+      ],
+    ),
+    child: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildNavBarItem(
+              icon: Icons.home_outlined,
+              activeIcon: Icons.home,
+              label: 'Home',
+              index: 0,
+              theme: theme,
+            ),
+            _buildNavBarItem(
+              icon: Icons.bookmark_outlined,
+              activeIcon: Icons.bookmark,
+              label: 'Bookmarks',
+              index: 1,
+              theme: theme,
+            ),
+            _buildNavBarItem(
+              icon: Icons.notifications_outlined,
+              activeIcon: Icons.notifications,
+              label: 'Notifications',
+              index: 2,
+              theme: theme,
+            ),
+            _buildNavBarItem(
+              icon: Icons.person_outline,
+              activeIcon: Icons.person,
+              label: 'Profile',
+              index: 3,
+              theme: theme,
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildNavBarItem({
     required IconData icon,
@@ -2124,16 +2332,18 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
     required int index,
     required ThemeData theme,
   }) {
-    final isSelected = _selectedIndex == index;
+    final isSelected = _selectedIndex == index; // ✅ now recognized
 
     return InkWell(
-      onTap: () => _onItemTapped(index),
+      onTap: () => _onItemTapped(index), // ✅ now recognized
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? theme.colorScheme.primary.withOpacity(0.1) : Colors.transparent,
+          color: isSelected
+              ? theme.colorScheme.primary.withOpacity(0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -2141,14 +2351,19 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
           children: [
             Icon(
               isSelected ? activeIcon : icon,
-              color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onBackground.withOpacity(0.7),
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onBackground.withOpacity(0.7),
             ),
             const SizedBox(height: 4),
             Text(
               label,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onBackground.withOpacity(0.7),
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onBackground.withOpacity(0.7),
+                fontWeight:
+                isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ],
@@ -2156,8 +2371,9 @@ class _StudentDashboardState extends State<StudentDashboard> with SingleTickerPr
       ),
     );
   }
- }
 
+
+}
 extension StringExtension on String {
   String capitalize() {
     return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";

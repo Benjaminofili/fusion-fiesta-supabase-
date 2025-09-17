@@ -34,21 +34,24 @@ class UserModel extends HiveObject {
   String? collegeIdProofUrl;
 
   @HiveField(9)
-  bool approved;
+  String? profilePictureUrl; // Added for profile picture
 
   @HiveField(10)
-  bool isLocalOnly;
+  bool approved;
 
   @HiveField(11)
-  String? sessionToken;
+  bool isLocalOnly;
 
   @HiveField(12)
-  DateTime createdAt;
+  String? sessionToken;
 
   @HiveField(13)
-  DateTime updatedAt;
+  DateTime createdAt;
 
   @HiveField(14)
+  DateTime updatedAt;
+
+  @HiveField(15)
   DateTime lastModified;
 
   UserModel({
@@ -61,6 +64,7 @@ class UserModel extends HiveObject {
     this.enrollmentNumber,
     this.department,
     this.collegeIdProofUrl,
+    this.profilePictureUrl,
     this.approved = false,
     this.isLocalOnly = false,
     this.sessionToken,
@@ -83,6 +87,7 @@ class UserModel extends HiveObject {
       enrollmentNumber: map['enrollment_number'],
       department: map['department'],
       collegeIdProofUrl: map['college_id_proof_url'],
+      profilePictureUrl: map['profile_picture_url'], // Added
       approved: map['approved'] ?? false,
       isLocalOnly: map['is_local_only'] ?? false,
       sessionToken: map['session_token'],
@@ -110,6 +115,7 @@ class UserModel extends HiveObject {
       'enrollment_number': enrollmentNumber,
       'department': department,
       'college_id_proof_url': collegeIdProofUrl,
+      'profile_picture_url': profilePictureUrl, // Added
       'approved': approved,
       'is_local_only': isLocalOnly,
       'session_token': sessionToken,
